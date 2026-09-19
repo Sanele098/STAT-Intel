@@ -45,15 +45,15 @@ export async function POST(request: Request) {
   })
   if (duplicate) return Response.json({ duplicate: { caseId: duplicate.case_reference, question: duplicate.question, status: duplicate.status, answer: duplicate.answer, updatedAt: duplicate.updated_at } })
   const caseReference = `MED-${Math.floor(100000 + Math.random() * 900000)}`
-  const { data: sources } = await supabase.from('statsa_knowledge_sources').select('title,topic,content,source_date,source_url').order('source_date', { ascending: false }).limit(12)
+  const { data: sources } = await supabase.from('stats_sa_sources').select('title,content,published_at,source_url,approved').eq('approved', true).order('published_at', { ascending: false }).limit(50)
   let draft = 'A Communications Official must review and approve this media response before release.'
   try {
-    const result = await generateText({ model: selfHostedAI(process.env.SELF_HOSTED_AI_MODEL ?? 'qwen2.5:7b'), system: 'You draft responses for Stats SA media queries. Use only the supplied approved sources. Never invent figures, never claim approval, and clearly flag uncertainty. This is an internal draft for a Communications Official, not a final answer.', prompt: `Media question:\n${question}\n\nApproved sources:\n${JSON.stringify(sources ?? [])}` })
+    const result = await generateText({ model: selfHostedAI(process.env.SELF_HOSTED_AI_MODEL ?? 'qwen2.5:7b'), system: 'You prepare a polished internal draft for a Stats SA Communications Official responding to a media house. Use only the supplied approved sources. Never invent figures or claim official approval. Return exactly this structure: SUBJECT: concise subject; DRAFT RESPONSE: a clear, publication-ready answer; SOURCE: source title and exact URL; EVIDENCE NOTE: relevant page, table, or limitation. If the sources do not answer the question, say EVIDENCE GAP and explain what must be verified. This remains a draft until an official approves it.', prompt: `Media question:\n${question}\n\nApproved sources:\n${JSON.stringify(sources ?? [])}` })
     draft = result.text
   } catch {
     draft = 'AI draft unavailable. Communications Official must prepare the response from approved sources.'
   }
-  const { data, error } = await supabase.from('public_queries').insert({ case_reference: caseReference, question, answer: draft, status: 'in_review', media_house_id: house.id, query_channel: 'media', escalation_reason: `media-house:${house.name}` }).select('case_reference,question,status,created_at').single()
+  const { data, error } = await supabase.from('public_queries').insert({ case_reference: caseReference, question, answer: draft, status: 'in_review', media_house_id: house.id, query_channel: 'media', escalation_reason: `media-house:${house.name}` }).select('case_reference,question,answer,status,created_at').single()
   if (error) return Response.json({ error: 'The query could not be submitted.' }, { status: 503 })
-  return Response.json({ query: data, message: 'Submitted to the Communications Official for approval.' }, { status: 201 })
+  return Response.json({ query: data, message: 'Your question was submitted with an AI-prepared draft for Communications review and approval.' }, { status: 201 })
 }
